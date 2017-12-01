@@ -96,100 +96,32 @@ int createFragmentShader() {
 
 }
 
-void drawTriangle() {
-	//vertex shader all about handling individual vertices
-	const char* vertexShaderSource = "#version 330 core\n layout(location = 0) in vec3 aPos;\n void main() \n{ gl_Position = vec4(aPos.x, aPos.y, aPos.z, 1.0);\n}";
-	//fragment shader all about calculating color output for pixels
-	const char* fragmentShaderSource = "#version 330 core \n out vec4 FragColor;\n void main() \n{FragColor = vec4(1.0f,0.5f,0.2f,1.0f); \n}";
+unsigned int createShaderProgram(unsigned int* shaders, unsigned int size) {
 
-	//(X,Y)
-	///////////////////////
-	//         | (0,1)  //
-	//         |        //
-	//    (0,0)|  (1,0) //
-	//--------------------
-	// (-1,0)  |        //
-	//         |        //
-	//         |(0,-1)  //
-	//////////////////////
-	//x , y, z
-	float vertices[] = {
-		-0.5f, -0.5f, 0.0f,
-		0.5f, -0.5f, 0.0f,
-		0.0f,  0.5f, 0.0f
-	};
-
-	//vertice buffer object id
-	unsigned int VBO;
-	glGenBuffers(1, &VBO);
-
-	//bind buffer object to GL_ARRAY_BUFFER
-	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-
-	//copy the vertices data int the bound buffer
-    //GL_STATIC_DRAW: the data will most likely not change at all or very rarely.
-	//GL_DYNAMIC_DRAW : the data is likely to change a lot.
-	//GL_STREAM_DRAW : the data will change every time it is drawn.
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
-
-	unsigned int vertexShader;
-	vertexShader = glCreateShader(GL_VERTEX_SHADER);
-
-	glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-	glCompileShader(vertexShader);
-
-	unsigned int fragmentShader;
-	fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-
-	glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-	glCompileShader(fragmentShader);
-
-	int  vertexSuccess; 
-	int fragmentSuccess;
-	char infoLog[512];
-
-	
-	glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &vertexSuccess);
-
-	if (!vertexSuccess)
-	{
-		glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::VERTEX::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-	else {
-		std::cout << "SUCCESS!! VERTEX SHADER\n" << std::endl;
-	}
-
-	
-	glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &fragmentSuccess);
-
-	if (!fragmentSuccess)
-	{
-		glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-		std::cout << "ERROR::SHADER::FRAGMENT::COMPILATION_FAILED\n" << infoLog << std::endl;
-	}
-	else {
-		std::cout << "SUCCESS!! FRAGMENT SHADER\n" << std::endl;
-	}
-
+	unsigned int* beginShader = shaders;
 	//shader is final linked version of multpile shaders combined. To use sahders we have to link them to shader program object
 	//and then activate the shader program when rendering objects. The activated shader programs shaders will be used when we issue render calls
 	unsigned int shaderProgram;
-    
+
 	//creates program and returns id to reference it
 	shaderProgram = glCreateProgram();
 
-	//attach shaders to program
-	glAttachShader(shaderProgram, vertexShader);
-	glAttachShader(shaderProgram, fragmentShader);
+	for (unsigned int i = 0; i < size; i++) {
+		glAttachShader(shaderProgram, *shaders);
+		shaders++;
+	}
+
+	shaders = beginShader;
+
 	//link program
 	glLinkProgram(shaderProgram);
 
 	int linkSuccess;
 
 	glGetProgramiv(shaderProgram, GL_LINK_STATUS, &linkSuccess);
-	
+
 	if (!linkSuccess) {
+		char infoLog[512];
 		glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
 		std::cout << "ERROR::SHADER::PROGRAM::COMPILATION_FAILED\n" << infoLog << std::endl;
 	}
@@ -200,9 +132,29 @@ void drawTriangle() {
 	//activate program
 	glUseProgram(shaderProgram);
 
-	// delete shaders after they have been linked into the program because they are nolonger needed
-	glDeleteShader(vertexShader);
-	glDeleteShader(fragmentShader);
+	for (unsigned int i = 0; i < size; i++) {
+		glDeleteShader(*shaders);
+		shaders++;
+	}
+
+	return shaderProgram;
+}
+
+void intialiseWithVertexArray(float *vertices, unsigned int size) {
+
+	//vertice buffer object id
+	unsigned int VBO;
+	glGenBuffers(1, &VBO);
+
+	//bind buffer object to GL_ARRAY_BUFFER
+	glBindBuffer(GL_ARRAY_BUFFER, VBO);
+
+	unsigned int vertexShader = createVertexShader();
+
+	unsigned int fragmentShader = createFragmentShader();
+
+	unsigned int shaders[2] = { vertexShader , fragmentShader };
+	unsigned int shaderProgram = createShaderProgram(shaders, 2);
 
 	//each vertex attribute takes its data from memory managed by a VBO/VBOs. The VBO/s that it uses is determeined by the ones currently
 	//bound to GL_ARRAY_BUFFER
@@ -218,16 +170,20 @@ void drawTriangle() {
 	glBindVertexArray(VAO);
 	// 2. copy our vertices array in a buffer for OPENGL to use
 	glBindBuffer(GL_ARRAY_BUFFER, VBO);
-	glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW);
+	//copy the vertices data int the bound buffer
+	//GL_STATIC_DRAW: the data will most likely not change at all or very rarely.
+	//GL_DYNAMIC_DRAW : the data is likely to change a lot.
+	//GL_STREAM_DRAW : the data will change every time it is drawn.
+	glBufferData(GL_ARRAY_BUFFER, size, vertices, GL_STATIC_DRAW);
 	// 3. then set our vertex attributes pointers
-		//tell opengl how it should interpret the vertex data per vertex attribute
-		// params:-
-		// 1. which vertex we want to configure (point on screen)
-		// 2. size of vertex attribute is a vec3 (x,y,z)
-		// 3. type of the data
-		// 4. specifies whether we want the data to be normalized
-		// 5. is the 'stride' which is the space between each consecutive vertex attribute sets - [x,y,z,x,y,z]
-		// 6. offset of where the position data begins in buffer
+	//tell opengl how it should interpret the vertex data per vertex attribute
+	// params:-
+	// 1. which vertex we want to configure (point on screen)
+	// 2. size of vertex attribute is a vec3 (x,y,z)
+	// 3. type of the data
+	// 4. specifies whether we want the data to be normalized
+	// 5. is the 'stride' which is the space between each consecutive vertex attribute sets - [x,y,z,x,y,z]
+	// 6. offset of where the position data begins in buffer
 	glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 
 	//enable the first vertices in the array
@@ -235,6 +191,10 @@ void drawTriangle() {
 
 	glUseProgram(shaderProgram);
 	glBindVertexArray(VAO);
+}
+
+void drawTriangle() {
+	
 
 	//GL_TRIANGLE is opengl primitive type
 	glDrawArrays(GL_TRIANGLES, 0, 3);
@@ -282,7 +242,24 @@ int main() {
 	//The moment a user resizes the window the viewport should be adjusted as well. 
 	glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
 
+	//(X,Y)
+	///////////////////////
+	//         | (0,1)  //
+	//         |        //
+	//    (0,0)|  (1,0) //
+	//--------------------
+	// (-1,0)  |        //
+	//         |        //
+	//         |(0,-1)  //
+	//////////////////////
+	//x , y, z
+	float vertices[] = {
+		-0.5f, -0.5f, 0.0f,
+		0.5f, -0.5f, 0.0f,
+		0.0f,  0.5f, 0.0f
+	};
 	
+	intialiseWithVertexArray(vertices, sizeof(vertices));
 
 	//While window wasnt closed swap the render buffers - opengl is double buffered one in foreground and one in background
 	while (!glfwWindowShouldClose(window))
